@@ -7,13 +7,13 @@ using YoutubeDLSharp;
 using YoutubeDLSharp.Options;
 using YoutubeTelegramMusic;
 
-const string TelegramEnv = "TELEGRAM_BOT_TOKEN";
-const string YtDlpEnv = "YOUTUBE_DLP_PATH";
-const string FfmpegEnv = "FFMPEG_PATH";
-var token = Environment.GetEnvironmentVariable(TelegramEnv);
+const string telegramEnv = "TELEGRAM_BOT_TOKEN";
+const string ytDlpEnv = "YOUTUBE_DLP_PATH";
+const string ffmpegEnv = "FFMPEG_PATH";
+var token = Environment.GetEnvironmentVariable(telegramEnv);
 
 if (token == null) {
-    Console.WriteLine($"Expect Telegram token. Set it to environment variable {TelegramEnv}");
+    Console.WriteLine($"Expect Telegram token. Set it to environment variable {telegramEnv}");
     return 1;
 }
 var botClient = new TelegramBotClient(token);
@@ -32,8 +32,8 @@ var options = new OptionSet()
 
 var ytdl = new YoutubeDL
 {
-    YoutubeDLPath = Environment.GetEnvironmentVariable(YtDlpEnv),
-    FFmpegPath = Environment.GetEnvironmentVariable(FfmpegEnv),
+    YoutubeDLPath = Environment.GetEnvironmentVariable(ytDlpEnv),
+    FFmpegPath = Environment.GetEnvironmentVariable(ffmpegEnv),
     OutputFolder = "/tmp"
 };
 
@@ -86,8 +86,8 @@ async Task HandleUpdateAsync(ITelegramBotClient client, Update update, Cancellat
                 messageId: updateMessage.MessageId, text: $"Uploading audio...", cancellationToken: cancellationToken);
         }
     }
-
     var progress = new Progress<DownloadProgress>(UpdateProgress);
+
     var res = await ytdl.RunAudioDownload(
         messageText,
         AudioConversionFormat.Mp3,
@@ -106,7 +106,7 @@ async Task HandleUpdateAsync(ITelegramBotClient client, Update update, Cancellat
         cancellationToken: cancellationToken,
         title: title,
         performer: artist);
-    
+        
     await client.EditMessageTextAsync(chatId: chatId, 
         messageId: updateMessage.MessageId, text: $"Done!", cancellationToken: cancellationToken);
 }
