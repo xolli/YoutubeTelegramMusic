@@ -14,7 +14,7 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-RUN apt-get -y update; apt-get -y install curl wget xz-utils
+RUN apt-get -y update; apt-get -y install curl wget xz-utils python3
 
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp > yt-dlp
 RUN chmod +x yt-dlp
