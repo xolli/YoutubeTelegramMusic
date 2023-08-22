@@ -14,6 +14,7 @@ public class YoutubeBotService : IHostedService
     private const string TelegramEnv = "TELEGRAM_BOT_TOKEN";
     private const string YtDlpEnv = "YOUTUBE_DLP_PATH";
     private const string FfmpegEnv = "FFMPEG_PATH";
+    private const long TelegramFileSizeLimit = 50 * 1024 * 1024;
 
     private readonly TelegramBotClient _botClient;
     private readonly YoutubeDL _ytdl;
@@ -37,25 +38,26 @@ public class YoutubeBotService : IHostedService
         _cts = new CancellationTokenSource();
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
-        ReceiverOptions receiverOptions = new ()
+        ReceiverOptions receiverOptions = new()
         {
-            AllowedUpdates = Array.Empty<UpdateType>() // receive all update types except ChatMember related updates
+            AllowedUpdates = Array.Empty<UpdateType>()
         };
-        
+
         var options = new OptionSet()
         {
             EmbedMetadata = true
         };
-        
+
         _botClient.StartReceiving(
             updateHandler: HandleUpdateAsync,
             pollingErrorHandler: HandlePollingErrorAsync,
             receiverOptions: receiverOptions,
             cancellationToken: _cts.Token
         );
-        var me = await _botClient.GetMeAsync();
+
+        return Task.CompletedTask;
 
         async Task HandleUpdateAsync(ITelegramBotClient client, Update update, CancellationToken cancelToken)
         {
@@ -85,30 +87,44 @@ public class YoutubeBotService : IHostedService
                 cancellationToken: cancelToken);
             var startUploading = false;
 
-            async void UpdateProgress(DownloadProgress p)
-            {
-                int progress = (int)Math.Round(p.Progress * 100);
-                if (progress == 100 && !startUploading)
-                {
-                    startUploading = true;
-                    await client.EditMessageTextAsync(chatId: chatId,
-                        messageId: updateMessage.MessageId, text: $"Uploading audio...",
-                        cancellationToken: cancelToken);
-                }
-            }
-
             var progress = new Progress<DownloadProgress>(UpdateProgress);
+
+            var audioData = await _ytdl.RunVideoDataFetch(messageText, overrideOptions: options, ct: cancelToken);
+            if (!audioData.Success)
+            {
+                await client.EditMessageTextAsync(chatId: chatId,
+                    messageId: updateMessage.MessageId, text: $"{string.Join(", ", audioData.ErrorOutput)}",
+                    cancellationToken: cancelToken);
+                return;
+            }
 
             var res = await _ytdl.RunAudioDownload(
                 messageText,
                 AudioConversionFormat.Mp3,
-                progress: progress
-            );
+                progress: progress,
+                ct: cancelToken);
 
-            var audioData = await _ytdl.RunVideoDataFetch(messageText, overrideOptions: options);
-            var metadata = audioData.Data.Title.Split("-", 2);
-            var artist = metadata.Length == 2 ? metadata[0] : null;
-            var title = metadata.Length == 2 ? metadata[1] : null;
+            if (!res.Success)
+            {
+                await client.EditMessageTextAsync(chatId: chatId,
+                    messageId: updateMessage.MessageId, text: $"{string.Join(", ", res.ErrorOutput)}",
+                    cancellationToken: cancelToken);
+                return;
+            }
+
+            long audioFileSize = new FileInfo(res.Data).Length;
+            if (audioFileSize >= TelegramFileSizeLimit)
+            {
+                await client.EditMessageTextAsync(chatId: chatId,
+                    messageId: updateMessage.MessageId,
+                    text: $"Maximum Audio File size is {Util.FormatFileSie(TelegramFileSizeLimit)}",
+                    cancellationToken: cancelToken);
+                return;
+            }
+
+            string[]? metadata = audioData.Data?.Title.Split("-", 2);
+            string? artist = metadata?.Length == 2 ? metadata[0] : null;
+            string? title = metadata?.Length == 2 ? metadata[1] : null;
 
             await using Stream stream = System.IO.File.OpenRead(res.Data);
             await client.SendAudioAsync(
@@ -120,6 +136,19 @@ public class YoutubeBotService : IHostedService
 
             await client.EditMessageTextAsync(chatId: chatId,
                 messageId: updateMessage.MessageId, text: $"Done!", cancellationToken: cancelToken);
+            return;
+
+            async void UpdateProgress(DownloadProgress p)
+            {
+                int progress = (int)Math.Round(p.Progress * 100);
+                if (progress == 100 && !startUploading)
+                {
+                    startUploading = true;
+                    await client.EditMessageTextAsync(chatId: chatId,
+                        messageId: updateMessage.MessageId, text: $"Uploading audio...",
+                        cancellationToken: cancelToken);
+                }
+            }
         }
 
         Task HandlePollingErrorAsync(ITelegramBotClient client, Exception exception, CancellationToken cancelToken)
