@@ -29,10 +29,22 @@ public class YoutubeBotService : IHostedService
         }
 
         _botClient = new TelegramBotClient(token);
+        string? fFmpegPath = Environment.GetEnvironmentVariable(FfmpegEnv);
+        string? youtubeDlPath = Environment.GetEnvironmentVariable(YtDlpEnv);
+        if (fFmpegPath == null)
+        {
+            throw new EnvVariablesException($"Expect ffmpeg path. Set it to environment variable {FfmpegEnv}");
+        }
+
+        if (youtubeDlPath == null)
+        {
+            throw new EnvVariablesException($"Expect yt-dlp path. Set it to environment variable {YtDlpEnv}");
+        }
+
         _ytdl = new YoutubeDL
         {
-            YoutubeDLPath = Environment.GetEnvironmentVariable(YtDlpEnv),
-            FFmpegPath = Environment.GetEnvironmentVariable(FfmpegEnv),
+            YoutubeDLPath = youtubeDlPath,
+            FFmpegPath = fFmpegPath,
             OutputFolder = "/tmp"
         };
         _cts = new CancellationTokenSource();

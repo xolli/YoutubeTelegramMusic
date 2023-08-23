@@ -14,15 +14,12 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-RUN apt-get -y update; apt-get -y install curl wget xz-utils python3
+RUN apt-get -y update; apt-get -y install curl wget xz-utils python3 build-essential nghttp2 libnghttp2-dev libssl-dev ffmpeg
 
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp > yt-dlp
 RUN chmod +x yt-dlp
 ENV YOUTUBE_DLP_PATH=/app/yt-dlp
 
-RUN wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz
-RUN tar xvf ffmpeg-git-amd64-static.tar.xz
-RUN FFMPEG_FOLDER="$(tar -tf ffmpeg-git-amd64-static.tar.xz | head -1 | cut -f1 -d"/")"
-ENV FFMPEG_PATH="/app/$FFMPEG_FOLDER/ffmpeg"
+ENV FFMPEG_PATH="/usr/bin/ffmpeg"
 
 ENTRYPOINT ["dotnet", "YoutubeTelegramMusic.dll"]
