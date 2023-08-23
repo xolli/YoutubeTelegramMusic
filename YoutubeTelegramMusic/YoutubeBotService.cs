@@ -59,7 +59,10 @@ public class YoutubeBotService : IHostedService
 
         var options = new OptionSet()
         {
-            EmbedMetadata = true
+            EmbedMetadata = true,
+            MaxFilesize = "50M",
+            NoPlaylist = true,
+            MaxDownloads = 1
         };
 
         _botClient.StartReceiving(
@@ -86,11 +89,12 @@ public class YoutubeBotService : IHostedService
             }
 
             var chatId = message.Chat.Id;
+
             if (!Util.IsYoutubeLink(messageText))
             {
                 await client.SendTextMessageAsync(
                     chatId: chatId,
-                    text: "It is not a YouTube link",
+                    text: "It is not a valid YouTube link",
                     cancellationToken: cancelToken);
                 return;
             }
@@ -104,9 +108,7 @@ public class YoutubeBotService : IHostedService
             var audioData = await _ytdl.RunVideoDataFetch(messageText, overrideOptions: options, ct: cancelToken);
             if (!audioData.Success)
             {
-                await client.EditMessageTextAsync(chatId: chatId,
-                    messageId: updateMessage.MessageId, text: $"{string.Join(", ", audioData.ErrorOutput)}",
-                    cancellationToken: cancelToken);
+                await ReportError(audioData.ErrorOutput, client, chatId, updateMessage, cancelToken);
                 return;
             }
 
@@ -114,13 +116,12 @@ public class YoutubeBotService : IHostedService
                 messageText,
                 AudioConversionFormat.Mp3,
                 progress: progress,
-                ct: cancelToken);
+                ct: cancelToken, 
+                overrideOptions: options);
 
             if (!res.Success)
             {
-                await client.EditMessageTextAsync(chatId: chatId,
-                    messageId: updateMessage.MessageId, text: $"{string.Join(", ", res.ErrorOutput)}",
-                    cancellationToken: cancelToken);
+                await ReportError(res.ErrorOutput, client, chatId, updateMessage, cancelToken);
                 return;
             }
 
@@ -174,6 +175,16 @@ public class YoutubeBotService : IHostedService
             Console.WriteLine(errorMessage);
             return Task.CompletedTask;
         }
+    }
+
+    private static async Task ReportError(string[] errorOutput, ITelegramBotClient client, long chatId,
+        Message updateMessage, CancellationToken cancelToken)
+    {
+        string errorMessage = string.Join(", ", errorOutput);
+        errorMessage = errorMessage.Trim().Length > 0 ? errorMessage : "Undefined error";
+        await client.EditMessageTextAsync(chatId: chatId,
+            messageId: updateMessage.MessageId, text: $"{errorMessage}",
+            cancellationToken: cancelToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

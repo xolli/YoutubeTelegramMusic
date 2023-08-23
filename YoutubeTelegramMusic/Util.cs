@@ -2,10 +2,9 @@ namespace YoutubeTelegramMusic;
 
 public static class Util
 {
-    private static readonly string[] Addresses = new string[]
-        { "youtu.be", "youtu.be.", "youtube.com", "www.youtube.com", "youtube.com.", "www.youtube.com." };
+    private static readonly string[] Hosts = { "youtu.be", "youtu.be.", "youtube.com", "www.youtube.com", "youtube.com.", "www.youtube.com." };
 
-    private static readonly string[] Schemes = new string[] { "http", "https" };
+    private static readonly string[] Schemes = { "http", "https" };
 
     public static bool IsYoutubeLink(string text)
     {
@@ -14,7 +13,7 @@ public static class Util
             return false;
         }
 
-        return Addresses.Contains(url.Host) && Schemes.Contains(url.Scheme);
+        return Hosts.Contains(url.Host) && Schemes.Contains(url.Scheme) && url.AbsolutePath.Length > 2;
     }
 
     public static string? FormatFileSie(long? bytes)
