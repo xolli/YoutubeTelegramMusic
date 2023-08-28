@@ -14,6 +14,7 @@ public class YoutubeBotService : IHostedService
     private const string TelegramEnv = "TELEGRAM_BOT_TOKEN";
     private const string YtDlpEnv = "YOUTUBE_DLP_PATH";
     private const string FfmpegEnv = "FFMPEG_PATH";
+    private static readonly string OutputFolder = System.IO.Path.GetTempPath();
     private const long TelegramFileSizeLimit = 50 * 1024 * 1024;
 
     private readonly TelegramBotClient _botClient;
@@ -29,9 +30,9 @@ public class YoutubeBotService : IHostedService
         }
 
         _botClient = new TelegramBotClient(token);
-        string? fFmpegPath = Environment.GetEnvironmentVariable(FfmpegEnv);
+        string? ffmpegPath = Environment.GetEnvironmentVariable(FfmpegEnv);
         string? youtubeDlPath = Environment.GetEnvironmentVariable(YtDlpEnv);
-        if (fFmpegPath == null)
+        if (ffmpegPath == null)
         {
             throw new EnvVariablesException($"Expect ffmpeg path. Set it to environment variable {FfmpegEnv}");
         }
@@ -44,8 +45,8 @@ public class YoutubeBotService : IHostedService
         _ytdl = new YoutubeDL
         {
             YoutubeDLPath = youtubeDlPath,
-            FFmpegPath = fFmpegPath,
-            OutputFolder = "/tmp"
+            FFmpegPath = ffmpegPath,
+            OutputFolder = OutputFolder
         };
         _cts = new CancellationTokenSource();
     }
@@ -62,7 +63,7 @@ public class YoutubeBotService : IHostedService
             EmbedMetadata = true,
             MaxFilesize = "50M",
             NoPlaylist = true,
-            MaxDownloads = 1
+            MaxDownloads = 2
         };
 
         _botClient.StartReceiving(
@@ -97,6 +98,15 @@ public class YoutubeBotService : IHostedService
                     text: "It is not a valid YouTube link",
                     cancellationToken: cancelToken);
                 return;
+            }
+
+            if (Util.IsPlaylist(messageText))
+            {
+                await client.SendTextMessageAsync(
+                    chatId: chatId,
+                    text: "It is a playlist",
+                    cancellationToken: cancelToken);
+                    return;
             }
 
             var updateMessage = await client.SendTextMessageAsync(chatId: chatId, text: "Downloading from youtube...",
@@ -153,14 +163,15 @@ public class YoutubeBotService : IHostedService
 
             async void UpdateProgress(DownloadProgress p)
             {
-                int progress = (int)Math.Round(p.Progress * 100);
-                if (progress == 100 && !startUploading)
+                int roundedProgress = (int)Math.Round(p.Progress * 100);
+                if (roundedProgress != 100 || startUploading)
                 {
-                    startUploading = true;
-                    await client.EditMessageTextAsync(chatId: chatId,
-                        messageId: updateMessage.MessageId, text: $"Uploading audio...",
-                        cancellationToken: cancelToken);
+                    return;
                 }
+                startUploading = true;
+                await client.EditMessageTextAsync(chatId: chatId,
+                    messageId: updateMessage.MessageId, text: $"Uploading audio...",
+                    cancellationToken: cancelToken);
             }
         }
 

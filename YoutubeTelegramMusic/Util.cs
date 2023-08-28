@@ -1,3 +1,6 @@
+using System.Threading.Tasks.Dataflow;
+using Microsoft.Extensions.Hosting;
+
 namespace YoutubeTelegramMusic;
 
 public static class Util
@@ -5,6 +8,8 @@ public static class Util
     private static readonly string[] Hosts = { "youtu.be", "youtu.be.", "youtube.com", "www.youtube.com", "youtube.com.", "www.youtube.com." };
 
     private static readonly string[] Schemes = { "http", "https" };
+
+    private static readonly string PlaylistPath = "/playlist";
 
     public static bool IsYoutubeLink(string text)
     {
@@ -14,6 +19,11 @@ public static class Util
         }
 
         return Hosts.Contains(url.Host) && Schemes.Contains(url.Scheme) && url.AbsolutePath.Length > 2;
+    }
+
+    public static bool IsPlaylist(string link)
+    {
+        return Uri.TryCreate(link, UriKind.Absolute, out var url) && PlaylistPath.Equals(url.AbsolutePath);
     }
 
     public static string? FormatFileSie(long? bytes)
