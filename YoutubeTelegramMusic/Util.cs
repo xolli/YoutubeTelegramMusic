@@ -1,5 +1,4 @@
-using System.Threading.Tasks.Dataflow;
-using Microsoft.Extensions.Hosting;
+using System.Text.RegularExpressions;
 
 namespace YoutubeTelegramMusic;
 
@@ -9,7 +8,9 @@ public static class Util
 
     private static readonly string[] Schemes = { "http", "https" };
 
-    private static readonly string PlaylistPath = "/playlist";
+    private const string PlaylistPath = "/playlist";
+
+    private const string CommandPattern = @"^/\w+(\s+\w+)*";
 
     public static bool IsYoutubeLink(string text)
     {
@@ -24,6 +25,11 @@ public static class Util
     public static bool IsPlaylist(string link)
     {
         return Uri.TryCreate(link, UriKind.Absolute, out var url) && PlaylistPath.Equals(url.AbsolutePath);
+    }
+
+    public static bool IsCommand(string text)
+    {
+        return Regex.IsMatch(text, CommandPattern);
     }
 
     public static string? FormatFileSie(long? bytes)
