@@ -33,7 +33,7 @@ public class YoutubeBotService : IHostedService
     {
         ReceiverOptions receiverOptions = new()
         {
-            AllowedUpdates = Array.Empty<UpdateType>()
+            AllowedUpdates = Array.Empty<UpdateType>(),
         };
 
         _botClient.StartReceiving(
@@ -43,29 +43,30 @@ public class YoutubeBotService : IHostedService
             cancellationToken: _cts.Token
         );
 
-        return Task.CompletedTask;
-
-        async Task HandleUpdateAsync(ITelegramBotClient client, Update update, CancellationToken cancelToken)
+        Task HandleUpdateAsync(ITelegramBotClient client, Update update, CancellationToken cancelToken)
         {
             // Only process Message updates: https://core.telegram.org/bots/api#message
             if (update.Message is not { } message)
             {
-                return;
+                return Task.CompletedTask;
             }
 
             // Only process text messages
             if (message.Text is not { } messageText)
             {
-                return;
+                return Task.CompletedTask;
             }
 
+#pragma warning disable CS4014
             if (Util.IsCommand(messageText))
             {
-                await HandleCommand(messageText, client, update, cancelToken);
-                return;
+                HandleCommand(messageText, client, update, cancelToken);
+                return Task.CompletedTask;
             }
 
-            await _ytAudioHandler.HandleUpdate(client, update, cancelToken);
+            _ytAudioHandler.HandleUpdate(client, update, cancelToken);
+#pragma warning restore CS4014
+            return Task.CompletedTask;
         }
 
         Task HandlePollingErrorAsync(ITelegramBotClient client, Exception exception, CancellationToken cancelToken)
@@ -79,6 +80,8 @@ public class YoutubeBotService : IHostedService
             Console.WriteLine(errorMessage);
             return Task.CompletedTask;
         }
+
+        return Task.CompletedTask;
     }
 
     private static async Task HandleCommand(string command, ITelegramBotClient client, Update update,

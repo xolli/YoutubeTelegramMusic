@@ -2,6 +2,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Options;
+using File = System.IO.File;
 
 namespace YoutubeTelegramMusic.commands;
 
@@ -40,7 +41,8 @@ public class YtAudioHandler : Command
         {
             YoutubeDLPath = youtubeDlPath,
             FFmpegPath = ffmpegPath,
-            OutputFolder = OutputFolder
+            OutputFolder = OutputFolder,
+            OutputFileTemplate = "[%(id)s]-%(epoch)s.%(ext)s" // FIXME error of 2 users try to download the same video at the same second
         };
     }
 
@@ -119,6 +121,7 @@ public class YtAudioHandler : Command
 
         await client.EditMessageTextAsync(chatId: chatId,
             messageId: updateMessage.MessageId, text: $"Done!", cancellationToken: cancelToken);
+        File.Delete(res.Data);
         return;
 
         async void UpdateProgress(DownloadProgress p)
