@@ -1,7 +1,9 @@
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.ReplyMarkups;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Options;
+using YoutubeTelegramMusic.buttons;
 using File = System.IO.File;
 
 namespace YoutubeTelegramMusic.commands;
@@ -70,10 +72,29 @@ public class YtAudioHandler : Command
                 cancellationToken: cancelToken);
             return;
         }
+        
+        InlineKeyboardMarkup inlineKeyboard = new(new[]
+        {
+            InlineKeyboardButton.WithCallbackData(text: "Cancel downloading", callbackData: "cancelDownloading"),
+        });
 
-        var updateMessage = await client.SendTextMessageAsync(chatId: chatId, text: "Downloading from youtube...",
-            cancellationToken: cancelToken);
+        var updateMessage = await client.SendTextMessageAsync(
+            chatId: chatId,
+            text: "Downloading from youtube...",
+            cancellationToken: cancelToken,
+            replyMarkup: inlineKeyboard
+            );
+
+        var downloadingCancelTokenSource = new CancellationTokenSource();
+        var downloadingCancelToken = downloadingCancelTokenSource.Token;
+        downloadingCancelToken.Register(async () =>
+        {
+            await client.EditMessageTextAsync(chatId: chatId,
+                messageId: updateMessage.MessageId, text: $"Downloading was canceled", cancellationToken: cancelToken);
+        });
+        CancelDownloading.AddTokenSource(updateMessage.MessageId, downloadingCancelTokenSource);
         var startUploading = false;
+        var cancelled = false;
 
         var progress = new Progress<DownloadProgress>(UpdateProgress);
 
@@ -88,9 +109,9 @@ public class YtAudioHandler : Command
             messageText,
             AudioConversionFormat.Mp3,
             progress: progress,
-            ct: cancelToken,
+            ct: downloadingCancelToken,
             overrideOptions: Options);
-
+        
         if (!res.Success)
         {
             await ReportError(res.ErrorOutput, client, chatId, updateMessage, cancelToken);
@@ -115,7 +136,7 @@ public class YtAudioHandler : Command
         await client.SendAudioAsync(
             chatId: chatId,
             audio: InputFile.FromStream(stream),
-            cancellationToken: cancelToken,
+            cancellationToken: downloadingCancelToken,
             title: title,
             performer: artist);
 
@@ -135,7 +156,9 @@ public class YtAudioHandler : Command
             startUploading = true;
             await client.EditMessageTextAsync(chatId: chatId,
                 messageId: updateMessage.MessageId, text: $"Uploading audio...",
-                cancellationToken: cancelToken);
+                cancellationToken: cancelToken,
+                replyMarkup: inlineKeyboard
+                );
         }
     }
 

@@ -4,6 +4,7 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using YoutubeTelegramMusic.buttons;
 using YoutubeTelegramMusic.commands;
 
 namespace YoutubeTelegramMusic;
@@ -13,7 +14,6 @@ public class YoutubeBotService : IHostedService
     private const string TelegramEnv = "TELEGRAM_BOT_TOKEN";
 
     private readonly TelegramBotClient _botClient;
-    private readonly CancellationTokenSource _cts;
 
     private readonly YtAudioHandler _ytAudioHandler = new ();
 
@@ -26,11 +26,12 @@ public class YoutubeBotService : IHostedService
         }
 
         _botClient = new TelegramBotClient(token);
-        _cts = new CancellationTokenSource();
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        CancellationTokenSource cts = new ();
+
         ReceiverOptions receiverOptions = new()
         {
             AllowedUpdates = Array.Empty<UpdateType>(),
@@ -40,12 +41,17 @@ public class YoutubeBotService : IHostedService
             updateHandler: HandleUpdateAsync,
             pollingErrorHandler: HandlePollingErrorAsync,
             receiverOptions: receiverOptions,
-            cancellationToken: _cts.Token
+            cancellationToken: cts.Token
         );
 
         Task HandleUpdateAsync(ITelegramBotClient client, Update update, CancellationToken cancelToken)
         {
-            // Only process Message updates: https://core.telegram.org/bots/api#message
+            if (update.CallbackQuery is { } callback)
+            {
+                HandleCallback(callback);
+                return Task.CompletedTask;
+            }
+            
             if (update.Message is not { } message)
             {
                 return Task.CompletedTask;
@@ -90,9 +96,17 @@ public class YoutubeBotService : IHostedService
         await CommandFactory.GetCommandByName(command.Split()[0]).HandleUpdate(client, update, cancelToken);
     }
 
+    private static void HandleCallback(CallbackQuery callback)
+    {
+        if (callback.Message?.MessageId is not null)
+        {
+            // FIXME callbackFactory
+            CancelDownloading.CancelDownloadingByMessageId(callback.Message.MessageId);
+        }
+    }
+
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        _cts.Cancel();
         return Task.CompletedTask;
     }
 }
