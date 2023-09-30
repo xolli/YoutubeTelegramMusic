@@ -94,7 +94,6 @@ public class YtAudioHandler : Command
         });
         CancelDownloading.AddTokenSource(updateMessage.MessageId, downloadingCancelTokenSource);
         var startUploading = false;
-        var cancelled = false;
 
         var progress = new Progress<DownloadProgress>(UpdateProgress);
 
