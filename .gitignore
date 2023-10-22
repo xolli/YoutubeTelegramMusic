@@ -481,3 +481,8 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+*Migrations
+YoutubeMusicDatabase/data
+*docker-compose.yml
+YoutubeTelegramMusic/migrate.sh

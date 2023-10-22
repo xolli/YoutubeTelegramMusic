@@ -1,23 +1,38 @@
+using YoutubeTelegramMusic.database;
+
 namespace YoutubeTelegramMusic.commands;
 
-public static class CommandFactory
+public class CommandFactory
 {
-    private static readonly Dictionary<string, Command> Commands;
+    private readonly Dictionary<string, Command> _userCommands;
+    private readonly Dictionary<string, Command> _adminCommands;
 
-    private static readonly Command DefaultCommand;
+    private readonly Command _defaultCommand;
 
-    static CommandFactory()
+    public CommandFactory(YtMusicContext db)
     {
-        Commands = new Dictionary<string, Command>()
+        _userCommands = new Dictionary<string, Command>
         {
             { "/start", new StartCommand() },
             { "/help", new HelpCommand() },
+            { "/language", new ChangeLanguage() }
         };
-        DefaultCommand = new UnknownCommand();
+        _adminCommands = new Dictionary<string, Command>
+        {
+            { "/stat", new GetStatistic(db) }
+        };
+        _defaultCommand = new UnknownCommand();
     }
 
-    public static Command GetCommandByName(string commandName)
+    public Command GetUserCommandByName(string commandName)
     {
-        return !Commands.TryGetValue(commandName, out var resultCommand) ? DefaultCommand : resultCommand;
+        return !_userCommands.TryGetValue(commandName, out var resultCommand) ? _defaultCommand : resultCommand;
+    }
+
+    public Command GetAdminCommand(string commandName)
+    {
+        return !_adminCommands.TryGetValue(commandName, out var resultCommand)
+            ? GetUserCommandByName(commandName)
+            : resultCommand;
     }
 }

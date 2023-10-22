@@ -4,6 +4,7 @@ using Telegram.Bot.Types.ReplyMarkups;
 using YoutubeDLSharp;
 using YoutubeDLSharp.Options;
 using YoutubeTelegramMusic.buttons;
+using YoutubeTelegramMusic.database;
 using File = System.IO.File;
 
 namespace YoutubeTelegramMusic.commands;
@@ -48,9 +49,9 @@ public class YtAudioHandler : Command
         };
     }
 
-    public override async Task HandleUpdate(ITelegramBotClient client, Update update, CancellationToken cancelToken)
+    public override async Task<bool> HandleUpdate(ITelegramBotClient client, Update update, CancellationToken cancelToken, Locale language = Locale.EN)
     {
-        if (update.Message == null) return;
+        if (update.Message == null) return false;
         long chatId = update.Message.Chat.Id;
         
         string messageText = update.Message.Text ?? "";
@@ -59,28 +60,28 @@ public class YtAudioHandler : Command
         {
             await client.SendTextMessageAsync(
                 chatId: chatId,
-                text: "It is not a valid YouTube link",
+                text: Localizer.GetValue("NotValidYoutubeLink", language),
                 cancellationToken: cancelToken);
-            return;
+            return false;
         }
 
         if (Util.IsPlaylist(messageText))
         {
             await client.SendTextMessageAsync(
                 chatId: chatId,
-                text: "It is a playlist",
+                text: Localizer.GetValue("Playlist", language),
                 cancellationToken: cancelToken);
-            return;
+            return false;
         }
         
         InlineKeyboardMarkup inlineKeyboard = new(new[]
         {
-            InlineKeyboardButton.WithCallbackData(text: "Cancel downloading", callbackData: "cancelDownloading"),
+            InlineKeyboardButton.WithCallbackData(text: Localizer.GetValue("CancelDownloading", language), callbackData: "cancelDownloading"),
         });
 
         var updateMessage = await client.SendTextMessageAsync(
             chatId: chatId,
-            text: "Downloading from youtube...",
+            text: Localizer.GetValue("Downloading", language),
             cancellationToken: cancelToken,
             replyMarkup: inlineKeyboard
             );
@@ -90,9 +91,9 @@ public class YtAudioHandler : Command
         downloadingCancelToken.Register(async () =>
         {
             await client.EditMessageTextAsync(chatId: chatId,
-                messageId: updateMessage.MessageId, text: $"Downloading was canceled", cancellationToken: cancelToken);
+                messageId: updateMessage.MessageId, text: Localizer.GetValue("CanceledDownloading", language), cancellationToken: cancelToken);
         });
-        CancelDownloading.AddTokenSource(updateMessage.MessageId, downloadingCancelTokenSource);
+        CancelDownloadingCallbackAction.AddTokenSource(updateMessage.MessageId, downloadingCancelTokenSource);
         var startUploading = false;
 
         var progress = new Progress<DownloadProgress>(UpdateProgress);
@@ -100,8 +101,8 @@ public class YtAudioHandler : Command
         var audioData = await _ytdl.RunVideoDataFetch(messageText, overrideOptions: Options, ct: cancelToken);
         if (!audioData.Success)
         {
-            await ReportError(audioData.ErrorOutput, client, chatId, updateMessage, cancelToken);
-            return;
+            await ReportError(audioData.ErrorOutput, client, chatId, updateMessage, cancelToken, language);
+            return false;
         }
 
         var res = await _ytdl.RunAudioDownload(
@@ -113,8 +114,8 @@ public class YtAudioHandler : Command
         
         if (!res.Success)
         {
-            await ReportError(res.ErrorOutput, client, chatId, updateMessage, cancelToken);
-            return;
+            await ReportError(res.ErrorOutput, client, chatId, updateMessage, cancelToken, language);
+            return false;
         }
 
         long audioFileSize = new FileInfo(res.Data).Length;
@@ -122,9 +123,9 @@ public class YtAudioHandler : Command
         {
             await client.EditMessageTextAsync(chatId: chatId,
                 messageId: updateMessage.MessageId,
-                text: $"Maximum Audio File size is {Util.FormatFileSie(TelegramFileSizeLimit)}",
+                text: String.Format(Localizer.GetValue("MaxAudiSize", language), Util.FormatFileSie(TelegramFileSizeLimit)),
                 cancellationToken: cancelToken);
-            return;
+            return false;
         }
 
         string[]? metadata = audioData.Data?.Title.Split("-", 2);
@@ -140,9 +141,10 @@ public class YtAudioHandler : Command
             performer: artist);
 
         await client.EditMessageTextAsync(chatId: chatId,
-            messageId: updateMessage.MessageId, text: $"Done!", cancellationToken: cancelToken);
+            messageId: updateMessage.MessageId, text: Localizer.GetValue("Done", language), cancellationToken: cancelToken);
         File.Delete(res.Data);
-        return;
+        
+        return true;
 
         async void UpdateProgress(DownloadProgress p)
         {
@@ -154,7 +156,7 @@ public class YtAudioHandler : Command
 
             startUploading = true;
             await client.EditMessageTextAsync(chatId: chatId,
-                messageId: updateMessage.MessageId, text: $"Uploading audio...",
+                messageId: updateMessage.MessageId, text: Localizer.GetValue("UploadingAudio", language),
                 cancellationToken: cancelToken,
                 replyMarkup: inlineKeyboard
                 );
@@ -162,10 +164,10 @@ public class YtAudioHandler : Command
     }
 
     private static async Task ReportError(string[] errorOutput, ITelegramBotClient client, long chatId,
-        Message updateMessage, CancellationToken cancelToken)
+        Message updateMessage, CancellationToken cancelToken, Locale language)
     {
         string errorMessage = string.Join(", ", errorOutput);
-        errorMessage = errorMessage.Trim().Length > 0 ? errorMessage : "Undefined error";
+        errorMessage = errorMessage.Trim().Length > 0 ? errorMessage : Localizer.GetValue("UndefinedError", language);
         await client.EditMessageTextAsync(chatId: chatId,
             messageId: updateMessage.MessageId, text: $"{errorMessage}",
             cancellationToken: cancelToken);

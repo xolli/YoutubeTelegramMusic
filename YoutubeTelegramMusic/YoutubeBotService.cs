@@ -1,11 +1,15 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
+using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using YoutubeTelegramMusic.buttons;
+using YoutubeTelegramMusic.callbacks;
 using YoutubeTelegramMusic.commands;
+using YoutubeTelegramMusic.database;
 
 namespace YoutubeTelegramMusic;
 
@@ -13,12 +17,29 @@ public class YoutubeBotService : IHostedService
 {
     private const string TelegramEnv = "TELEGRAM_BOT_TOKEN";
 
+    private const string AdminsListIdsEnv = "ADMIN_TG_IDS";
+
     private readonly TelegramBotClient _botClient;
 
-    private readonly YtAudioHandler _ytAudioHandler = new ();
+    private readonly YtAudioHandler _ytAudioHandler = new();
 
-    public YoutubeBotService()
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    public YoutubeBotService(IServiceScopeFactory scopeFactory)
     {
+        _scopeFactory = scopeFactory;
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var ytMusicDbContext = scope.ServiceProvider.GetRequiredService<YtMusicContext>();
+            ytMusicDbContext.Database.Migrate();
+            var userService = scope.ServiceProvider.GetRequiredService<UserService>();
+            string? adminIdList = Environment.GetEnvironmentVariable(AdminsListIdsEnv);
+            if (adminIdList is not null)
+            {
+                userService.InitAdmins(adminIdList.Split(",").Select(long.Parse).ToList());
+            }
+        }
+
         string? token = Environment.GetEnvironmentVariable(TelegramEnv);
         if (token == null)
         {
@@ -30,7 +51,7 @@ public class YoutubeBotService : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        CancellationTokenSource cts = new ();
+        CancellationTokenSource cts = new();
 
         ReceiverOptions receiverOptions = new()
         {
@@ -46,12 +67,20 @@ public class YoutubeBotService : IHostedService
 
         Task HandleUpdateAsync(ITelegramBotClient client, Update update, CancellationToken cancelToken)
         {
+            using var userServiceScope = _scopeFactory.CreateScope();
+            var userService = userServiceScope.ServiceProvider.GetRequiredService<UserService>();
+            if (update.Message?.From is not null)
+            {
+                userService.CreateOrUpdateUser(update.Message.From.Id, update.Message.From.Username,
+                    update.Message.From.FirstName, update.Message.From.LastName);
+            }
+
             if (update.CallbackQuery is { } callback)
             {
-                HandleCallback(callback);
+                HandleCallback(client, callback);
                 return Task.CompletedTask;
             }
-            
+
             if (update.Message is not { } message)
             {
                 return Task.CompletedTask;
@@ -63,15 +92,20 @@ public class YoutubeBotService : IHostedService
                 return Task.CompletedTask;
             }
 
-#pragma warning disable CS4014
             if (Util.IsCommand(messageText))
             {
                 HandleCommand(messageText, client, update, cancelToken);
                 return Task.CompletedTask;
             }
 
-            _ytAudioHandler.HandleUpdate(client, update, cancelToken);
-#pragma warning restore CS4014
+            var userLanguage = update.Message.From?.Id is not null
+                ? userService.GetLocale(update.Message.From.Id)
+                : Locale.EN;
+            _ytAudioHandler.HandleUpdate(client, update, cancelToken, userLanguage).ContinueWith((task) =>
+            {
+                if (!task.Result || update.Message?.From is null) return;
+                userService.CountDownload(update.Message.From);
+            }, cancelToken);
             return Task.CompletedTask;
         }
 
@@ -90,19 +124,37 @@ public class YoutubeBotService : IHostedService
         return Task.CompletedTask;
     }
 
-    private static async Task HandleCommand(string command, ITelegramBotClient client, Update update,
+    private async Task HandleCommand(string command, ITelegramBotClient client, Update update,
         CancellationToken cancelToken)
     {
-        await CommandFactory.GetCommandByName(command.Split()[0]).HandleUpdate(client, update, cancelToken);
+        using var scope = _scopeFactory.CreateScope();
+        var factory = scope.ServiceProvider.GetRequiredService<CommandFactory>();
+        var userService = scope.ServiceProvider.GetRequiredService<UserService>();
+        string commandName = command.Split()[0];
+        if (update.Message?.From is not null && userService.IsAdmin(update.Message.From.Id))
+        {
+            await factory.GetAdminCommand(commandName).HandleUpdate(client, update, cancelToken,
+                userService.GetLocale(update.Message.From.Id));
+        }
+        else if (update.Message?.From is not null)
+        {
+            await factory.GetUserCommandByName(commandName).HandleUpdate(client, update, cancelToken,
+                userService.GetLocale(update.Message.From.Id));
+        }
+        else
+        {
+            await factory.GetUserCommandByName(commandName).HandleUpdate(client, update, cancelToken);
+        }
     }
 
-    private static void HandleCallback(CallbackQuery callback)
+    private void HandleCallback(ITelegramBotClient client, CallbackQuery callback)
     {
-        if (callback.Message?.MessageId is not null)
-        {
-            // FIXME callbackFactory
-            CancelDownloading.CancelDownloadingByMessageId(callback.Message.MessageId);
-        }
+        if (callback.Data is null || callback.Message is null) return;
+        using var scope = _scopeFactory.CreateScope();
+        var callbackFactory = scope.ServiceProvider.GetRequiredService<CallbackActionFactory>();
+        var callbackAction = callbackFactory.GetCallbackActionByName(callback.Data);
+        callbackAction?.Handle(callback);
+        client.MakeRequestAsync(new AnswerCallbackQueryRequest(callback.Id));
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

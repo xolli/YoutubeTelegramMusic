@@ -18,8 +18,9 @@ RUN apt-get -y update; apt-get -y install curl wget xz-utils python3 build-essen
 
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp > yt-dlp
 RUN chmod +x yt-dlp
-ENV YOUTUBE_DLP_PATH=/app/yt-dlp
 
+
+ENV YOUTUBE_DLP_PATH=/app/yt-dlp
 ENV FFMPEG_PATH="/usr/bin/ffmpeg"
 
 ENTRYPOINT ["dotnet", "YoutubeTelegramMusic.dll"]
