@@ -4,6 +4,10 @@ This telegram bot can extract audio by YouTube link and upload it to [Telegram](
 
 Just send link to a bot and get an audio file
 
+![Docker Pulls](https://img.shields.io/docker/pulls/xolli/yt-tg-music?style=flat-square)
+![Code Size](https://img.shields.io/github/languages/code-size/xolli/YoutubeTelegramMusic.svg?style=flat-square)
+![License](https://img.shields.io/github/license/xolli/YoutubeTelegramMusic.svg?style=flat-square)
+
 # Deploying
 
 ## Docker
@@ -30,6 +34,7 @@ You can try this bot on the [link](https://t.me/youtubedlmusicbot)
 | `YT_PS_DATABASE`     | Postgres database name to save statistic                | false     | same as `YT_PS_USERNAME` |
 | `YOUTUBE_DLP_PATH`   | Path to [youtube dlp](https://github.com/yt-dlp/yt-dlp) | true      |                          |
 | `FFMPEG_PATH`        | path to [ffmpeg](https://ffmpeg.org/)                   | true      |                          |
+| `YT_LOG_DIRECTORY`   | path to log files                                       | false     | null                     |
 
 # Planned features
 

@@ -1,3 +1,4 @@
+using Serilog;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -101,7 +102,7 @@ public class YtAudioHandler : Command
         var audioData = await _ytdl.RunVideoDataFetch(messageText, overrideOptions: Options, ct: cancelToken);
         if (!audioData.Success)
         {
-            await ReportError(audioData.ErrorOutput, client, chatId, updateMessage, cancelToken, language);
+            await ReportError(audioData.ErrorOutput, messageText, client, chatId, updateMessage, language, cancelToken);
             return false;
         }
 
@@ -114,7 +115,7 @@ public class YtAudioHandler : Command
         
         if (!res.Success)
         {
-            await ReportError(res.ErrorOutput, client, chatId, updateMessage, cancelToken, language);
+            await ReportError(res.ErrorOutput, messageText, client, chatId, updateMessage, language, cancelToken);
             return false;
         }
 
@@ -132,7 +133,7 @@ public class YtAudioHandler : Command
         string? artist = metadata?.Length == 2 ? metadata[0] : null;
         string? title = metadata?.Length == 2 ? metadata[1] : null;
 
-        await using Stream stream = System.IO.File.OpenRead(res.Data);
+        await using Stream stream = File.OpenRead(res.Data);
         await client.SendAudioAsync(
             chatId: chatId,
             audio: InputFile.FromStream(stream),
@@ -148,7 +149,7 @@ public class YtAudioHandler : Command
 
         async void UpdateProgress(DownloadProgress p)
         {
-            int roundedProgress = (int)Math.Round(p.Progress * 100);
+            var roundedProgress = (int)Math.Round(p.Progress * 100);
             if (roundedProgress != 100 || startUploading)
             {
                 return;
@@ -163,10 +164,11 @@ public class YtAudioHandler : Command
         }
     }
 
-    private static async Task ReportError(string[] errorOutput, ITelegramBotClient client, long chatId,
-        Message updateMessage, CancellationToken cancelToken, Locale language)
+    private static async Task ReportError(string[] errorOutput, string messageText, ITelegramBotClient client, long chatId,
+        Message updateMessage, Locale language, CancellationToken cancelToken)
     {
         string errorMessage = string.Join(", ", errorOutput);
+        Log.Error($"{errorMessage}, message: {messageText}");
         errorMessage = errorMessage.Trim().Length > 0 ? errorMessage : Localizer.GetValue("UndefinedError", language);
         await client.EditMessageTextAsync(chatId: chatId,
             messageId: updateMessage.MessageId, text: $"{errorMessage}",

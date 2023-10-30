@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Serilog;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
@@ -103,8 +104,15 @@ public class YoutubeBotService : IHostedService
                 : Locale.EN;
             _ytAudioHandler.HandleUpdate(client, update, cancelToken, userLanguage).ContinueWith((task) =>
             {
-                if (!task.Result || update.Message?.From is null) return;
-                userService.CountDownload(update.Message.From);
+                using var userServiceScopeCountDownload = _scopeFactory.CreateScope();
+                var userServiceCountDownload = userServiceScopeCountDownload.ServiceProvider.GetRequiredService<UserService>();
+                if (!task.Result || update.Message?.From is null)
+                {
+                    Log.Information("User {A} has tried to download some youtube video and it wasn't successful", update.Message?.From?.Username != null ? $"@{update.Message.From.Username}" : update.Message.From?.FirstName);
+                    return;
+                }
+                Log.Information("User {A} has downloaded some youtube video", update.Message.From?.Username != null ? $"@{update.Message.From.Username}" : update.Message.From?.FirstName);
+                userServiceCountDownload.CountDownload(update.Message.From);
             }, cancelToken);
             return Task.CompletedTask;
         }
